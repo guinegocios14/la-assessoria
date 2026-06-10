@@ -193,6 +193,17 @@ textarea::placeholder{color:var(--la-muted)}
   box-shadow:0 3px 14px rgba(245,130,10,0.25)
 }
 .btn-download:hover{transform:translateY(-1px);color:#fff;box-shadow:0 5px 18px rgba(245,130,10,0.4)}
+.btn-pdf{
+  background:linear-gradient(135deg,#1A6FC4,#2196F3);
+  border-color:#1A6FC4;color:#fff;
+  box-shadow:0 3px 14px rgba(26,111,196,0.25)
+}
+.btn-pdf:hover{transform:translateY(-1px);color:#fff;box-shadow:0 5px 18px rgba(26,111,196,0.4)}
+.btn-reset{
+  background:transparent;
+  border-color:rgba(255,80,80,0.4);color:#FF6B6B;
+}
+.btn-reset:hover{border-color:#FF6B6B;background:rgba(255,80,80,0.1);color:#FF6B6B}
 
 /* CAPTION */
 .caption-card{
@@ -394,9 +405,11 @@ textarea::placeholder{color:var(--la-muted)}
           </div>
           <div class="canvas-actions">
             <button class="btn-action btn-download" id="btnDownload">⬇️ Baixar Imagem HD</button>
+            <button class="btn-action btn-pdf" id="btnPDF">📄 Baixar PDF Completo</button>
             <button class="btn-action" id="btnRegen">🔄 Gerar Novamente</button>
             <button class="btn-action" id="btnNextStyle">🎨 Próximo Estilo</button>
             <button class="btn-action" id="btnUseHero">📸 Usar Foto do Luis</button>
+            <button class="btn-action btn-reset" id="btnReset">🔁 Reiniciar Criativo</button>
           </div>
         </div>
 
@@ -822,6 +835,150 @@ document.getElementById('btnDownload').addEventListener('click',()=>{
   a.download=`la-assessoria-${state.activity.toLowerCase()}-${Date.now()}.png`;
   a.href=off.toDataURL('image/png',1.0);a.click();
   showToast('✅ Imagem HD baixada!');
+});
+
+// ── RESET ─────────────────────────────────────────────────────────────────
+document.getElementById('btnReset').addEventListener('click',()=>{
+  // Limpar estado
+  state.content='';
+  state.refs=[];
+  state.lastGenerated=null;
+  state.activity='Corrida';
+  state.style='impact';
+  state.format={name:'feed',w:1080,h:1080};
+  state.useHeroPhoto=true;
+  // Limpar UI
+  contentInput.value='';
+  document.getElementById('charCount').textContent='0 caracteres';
+  document.getElementById('refsGrid').innerHTML='';
+  captionText.textContent='';
+  hashtagsText.textContent='';
+  // Reset tags
+  document.querySelectorAll('.activity-tag').forEach(t=>t.classList.toggle('active',t.dataset.activity==='Corrida'));
+  document.querySelectorAll('.format-card').forEach(c=>c.classList.toggle('active',c.dataset.format==='feed'));
+  document.querySelectorAll('.style-option').forEach(s=>s.classList.toggle('active',s.dataset.style==='impact'));
+  // Reset hero btn
+  document.getElementById('btnUseHero').textContent='📸 Usar Foto do Luis';
+  // Esconder output, mostrar empty state
+  document.getElementById('outputArea').style.display='none';
+  document.getElementById('emptyState').style.display='flex';
+  // Limpar canvas
+  const ctx2=canvas.getContext('2d');
+  ctx2.clearRect(0,0,canvas.width,canvas.height);
+  // Rolar para o topo
+  window.scrollTo({top:0,behavior:'smooth'});
+  renderIdeas();
+  showToast('✅ Criativo reiniciado!');
+});
+
+// ── PDF COMPLETO ───────────────────────────────────────────────────────────
+document.getElementById('btnPDF').addEventListener('click',async()=>{
+  if(!state.lastGenerated){showToast('⚠️ Gere um criativo primeiro!');return;}
+  showToast('⏳ Gerando PDF...');
+  try{
+    // Gerar imagem HD do canvas
+    const off=document.createElement('canvas');
+    const{w,h}=state.format;
+    off.width=w;off.height=h;
+    const octx=off.getContext('2d');
+    octx.drawImage(canvas,0,0,canvas.width,canvas.height,0,0,w,h);
+    const imgData=off.toDataURL('image/png',1.0);
+
+    // Coletar ideias da tela
+    const ideiaCards=document.querySelectorAll('.idea-card');
+    const ideias=[];
+    ideiaCards.forEach(card=>{
+      const t=card.querySelector('.idea-title');
+      const d=card.querySelector('.idea-desc');
+      if(t&&d) ideias.push({titulo:t.textContent,desc:d.textContent});
+    });
+
+    // Montar HTML do PDF
+    const caption=captionText.textContent||'';
+    const hashtags=hashtagsText.textContent||'';
+    const activity=state.activity;
+    const now=new Date().toLocaleDateString('pt-BR');
+
+    const htmlPDF=`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>LA Assessoria Esportiva – Criativo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',sans-serif;background:#fff;color:#111;padding:32px}
+  .header{display:flex;align-items:center;gap:16px;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #F5820A}
+  .header-logo{width:64px;height:64px;object-fit:contain}
+  .header-title h1{font-size:22px;font-weight:800;color:#0D1B2E}
+  .header-title p{font-size:13px;color:#888;margin-top:2px}
+  .section{margin-bottom:28px}
+  .section-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#F5820A;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #eee}
+  .post-img{width:100%;max-width:480px;border-radius:12px;display:block;margin:0 auto}
+  .caption-box{background:#f8f9fa;border-left:4px solid #F5820A;border-radius:0 8px 8px 0;padding:16px;font-size:13px;line-height:1.8;white-space:pre-wrap}
+  .hashtags-box{font-size:12px;color:#1A6FC4;line-height:2;padding:12px;background:#f0f7ff;border-radius:8px}
+  .idea{display:flex;gap:12px;padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:8px;align-items:flex-start}
+  .idea-n{font-size:20px;font-weight:800;color:#F5820A;min-width:28px;line-height:1}
+  .idea-t{font-size:13px;font-weight:700;margin-bottom:3px}
+  .idea-d{font-size:12px;color:#555;line-height:1.5}
+  .meta{font-size:11px;color:#aaa;text-align:center;margin-top:28px;padding-top:16px;border-top:1px solid #eee}
+  @media print{body{padding:16px}.post-img{max-width:360px}}
+</style>
+</head>
+<body>
+<div class="header">
+  <img class="header-logo" src="${document.getElementById('logoImg').src}" alt="LA Assessoria">
+  <div class="header-title">
+    <h1>LA Assessoria Esportiva</h1>
+    <p>Criativo gerado em ${now} · Modalidade: ${activity}</p>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-label">📸 Imagem do Post</div>
+  <img class="post-img" src="${imgData}" alt="Criativo">
+</div>
+
+<div class="section">
+  <div class="section-label">✍️ Legenda para o Instagram</div>
+  <div class="caption-box">${caption}</div>
+</div>
+
+<div class="section">
+  <div class="section-label"># Hashtags</div>
+  <div class="hashtags-box">${hashtags}</div>
+</div>
+
+<div class="section">
+  <div class="section-label">💡 Ideias de Conteúdo para Engajar</div>
+  ${ideias.map((id,i)=>`
+  <div class="idea">
+    <div class="idea-n">0${i+1}</div>
+    <div>
+      <div class="idea-t">${id.titulo}</div>
+      <div class="idea-d">${id.desc}</div>
+    </div>
+  </div>`).join('')}
+</div>
+
+<div class="meta">LA Assessoria Esportiva · Luis Adriano · @laassessoriaesportiva</div>
+</body>
+</html>`;
+
+    // Abrir em nova aba e acionar print/save como PDF
+    const win=window.open('','_blank');
+    win.document.write(htmlPDF);
+    win.document.close();
+    win.onload=()=>{
+      setTimeout(()=>{
+        win.print();
+      },800);
+    };
+    showToast('✅ PDF aberto — use Ctrl+P para salvar!');
+  }catch(e){
+    console.error(e);
+    showToast('❌ Erro ao gerar PDF');
+  }
 });
 document.getElementById('btnCopy').addEventListener('click',()=>{
   const full=captionText.textContent+'\n\n'+hashtagsText.textContent;
